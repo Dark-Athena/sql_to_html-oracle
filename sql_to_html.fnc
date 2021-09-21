@@ -2,7 +2,26 @@ CREATE OR REPLACE FUNCTION SQL_TO_HTML(O_ERROR_MESSAGE IN OUT VARCHAR2,
                                        l_sql           IN varchar2,
                                        l_text          OUT clob,
                                        l_head IN varchar2)
-          /*DarkAthena 查询语句转HTML程序   20150806
+/*
+Copyright DarkAthena
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+*/
+          /*DarkAthena 
+            查询语句转HTML程序   
+            2015-08-06
+            EMAIL:darkathena@qq.com
+          
            1.L_HEAD为标题
            2.L_SQL为查询语句，注意，查询结果中的任意字段都不能为空，若原始数据有空值，请使用NVL函数填充任意非空值
            3.L_TEXL为输出格式化的HTML文本*/

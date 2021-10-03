@@ -3,7 +3,7 @@ CREATE OR REPLACE FUNCTION SQL_TO_HTML(O_ERROR_MESSAGE IN OUT VARCHAR2,
                                        l_text          OUT clob,
                                        l_head IN varchar2)
 /*
-Copyright DarkAthena
+Copyright DarkAthena(darkathena@qq.com)
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.

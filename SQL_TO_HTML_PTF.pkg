@@ -1,0 +1,199 @@
+CREATE OR REPLACE PACKAGE SQL_TO_HTML_PTF AS
+  /*
+  Copyright DarkAthena(darkathena@qq.com)
+  
+     Licensed under the Apache License, Version 2.0 (the "License");
+     you may not use this file except in compliance with the License.
+     You may obtain a copy of the License at
+  
+         http://www.apache.org/licenses/LICENSE-2.0
+  
+     Unless required by applicable law or agreed to in writing, software
+     distributed under the License is distributed on an "AS IS" BASIS,
+     WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+     See the License for the specific language governing permissions and
+     limitations under the License.
+  */
+  /* author:DarkAthena 
+     name:query sql to a html-table  (oracle 18 c leastest)
+     date:2021-10-27
+     EMAIL:darkathena@qq.com
+     
+      example 1:
+     select SQL_TO_HTML_PTF.main(Q'{select * from job_history 
+  union all select 1,date'2021-10-27',null,'',cast(null as number) 
+  from dual}') html_table  from dual; 
+  
+     example 2:
+     select SQL_TO_HTML_PTF.main(Q'{select * from job_history 
+  union all select 1,date'2021-10-27',null,'',cast(null as number) 
+  from dual}',
+  'this is title','None value') html_table  from dual; 
+  
+   */
+
+  g_nvl_value varchar2(20) := '-';
+  FUNCTION INPUT(tab TABLE) RETURN TABLE
+    pipelined row polymorphic USING SQL_TO_HTML_PTF;
+
+  FUNCTION describe(tab IN OUT dbms_tf.table_t) RETURN dbms_tf.describe_t;
+  PROCEDURE FETCH_ROWS;
+  FUNCTION main(l_sql       IN varchar2,
+                l_head      IN varchar2 DEFAULT NULL,
+                l_nvl_value in varchar2 default g_nvl_value) RETURN clob;
+END SQL_TO_HTML_PTF;
+/
+CREATE OR REPLACE PACKAGE BODY SQL_TO_HTML_PTF AS
+  FUNCTION describe(tab IN OUT dbms_tf.table_t) RETURN dbms_tf.describe_t AS
+    new_cols DBMS_TF.COLUMNS_NEW_T;
+  BEGIN
+    FOR i IN 1 .. tab.column.count LOOP
+      --对所有字段循环
+      IF tab.column(i).description.type IN (dbms_tf.type_date) THEN
+        --如果字段是日期类型
+        tab.column(i).pass_through := FALSE;
+        tab.column(i).for_read := TRUE; --是否多态表的列
+        NEW_COLS(i) := DBMS_TF.COLUMN_METADATA_T(name => tab.column(i).description.name, --字段名不变
+                                                 type => DBMS_TF.TYPE_VARCHAR2 --字段类型改成varchar2
+                                                 );
+      else
+        tab.column(i).pass_through := FALSE;
+        tab.column(i).for_read := TRUE; --是否多态表的列
+        NEW_COLS(i) := DBMS_TF.COLUMN_METADATA_T(name => tab.column(i).description.name, --字段名不变
+                                                 type => DBMS_TF.TYPE_VARCHAR2); --字段类型不变
+      END IF;
+    END LOOP;
+    RETURN DBMS_TF.describe_t(new_columns     => new_cols,
+                              row_replication => true);
+  END;
+
+  PROCEDURE FETCH_ROWS AS
+    inp_rs DBMS_TF.row_set_t;
+    out_rs DBMS_TF.row_set_t;
+    rows   PLS_INTEGER;
+  BEGIN
+    --只有上面进入了NEW_COLS的字段才会执行下面这段，其他字段保持不变
+    --inp_rs 表示原始数据
+    --out_rs 表示要输出的数据，默认情况下为空
+    DBMS_TF.get_row_set(inp_rs, rows); --获取原始数据
+    FOR c IN 1 .. inp_rs.count() LOOP
+      --对列进行循环
+      FOR r IN 1 .. rows LOOP
+        --对行进行循环
+        if inp_rs(c).description.type = DBMS_TF.TYPE_date then
+          if inp_rs(c).tab_date(r) = trunc(inp_rs(c).tab_date(r)) then
+            --这里做了个特殊处理，兼容年月日和年月日时分秒两种
+            out_rs(c).tab_varchar2(r) := to_char((inp_rs(c).tab_date(r)),
+                                                 'yyyy-mm-dd');
+          else
+            out_rs(c).tab_varchar2(r) := to_char((inp_rs(c).tab_date(r)),
+                                                 'yyyy-mm-dd hh24:mi:ss');
+          end if;
+        
+        elsif inp_rs(c).description.type = DBMS_TF.type_number then
+          out_rs(c).tab_varchar2(r) := to_char(inp_rs(c).tab_number(r));
+        elsif inp_rs(c).description.type = DBMS_TF.TYPE_VARCHAR2 then
+          out_rs(c).tab_varchar2(r) := inp_rs(c).tab_varchar2(r);
+        
+        end if;
+        out_rs(c).tab_varchar2(r) := nvl(out_rs(c).tab_varchar2(r),
+                                         g_nvl_value);
+      END LOOP;
+    END LOOP;
+    DBMS_TF.put_row_set(out_rs, replication_factor => 1);
+  END;
+  FUNCTION main(l_sql       IN varchar2,
+                l_head      IN varchar2 DEFAULT NULL,
+                l_nvl_value in varchar2 default g_nvl_value) RETURN clob IS
+    O_ERROR_MESSAGE VARCHAR2(4000);
+    l_text          clob;
+    cur_            SYS_REFCURSOR;
+    l_null          number;
+    l_ct            number;
+    l_sql1          varchar2(4000);
+    l_sql2          varchar2(4000);
+    CURSOR get_columns IS
+      SELECT t2.column_value.getrootelement() name,
+             EXTRACTVALUE(t2.column_value, 'node()') VALUE
+        FROM (SELECT * FROM TABLE(XMLSEQUENCE(cur_))) t1,
+             TABLE(XMLSEQUENCE(EXTRACT(t1.column_value, '/ROW/node()'))) t2;
+    pragma autonomous_transaction;
+  
+  BEGIN
+  
+    OPEN cur_ FOR 'select 1 from (' || l_sql || ') where rownum=1';
+    fetch cur_
+      into l_null;
+    if cur_%notfound then
+      L_TEXT := NULL;
+      return L_TEXT;
+    end if;
+  
+    L_TEXT      := NULL;
+    L_TEXT      := '<!DOCTYPE HTML><html><head>
+<body>' ||
+                  ---CSS样式----来自SQLPLUS
+                   '<style type=''text/css''>
+             body {font:10pt Arial,Helvetica,sans-serif; color:black; background:White;}
+             p {font:10pt Arial,Helvetica,sans-serif; color:black; background:White;}
+             table,tr,td {font:10pt Arial,Helvetica,sans-serif; color:Black; background:#f7f7e7; padding:0px 0px 0px 0px; margin:0px 0px 0px 0px;}
+             th {font:bold 10pt Arial,Helvetica,sans-serif; color:#336699; background:#cccc99; padding:0px 0px 0px 0px;}
+             h1 {font:16pt Arial,Helvetica,Geneva,sans-serif; color:#336699; background-color:White; border-bottom:1px solid #cccc99; margin-top:0pt; margin-bottom:0pt; padding:0px 0px 0px 0px;}
+             h2 {font:bold 10pt Arial,Helvetica,Geneva,sans-serif; color:#336699; background-color:White; margin-top:4pt; margin-bottom:0pt;}
+             a {font:9pt Arial,Helvetica,sans-serif; color:#663300; background:#ffffff; margin-top:0pt; margin-bottom:0pt; vertical-align:top;}
+             </style>'
+                  
+                   || '<h1>' || l_head || '</h1>
+<table border="1" >
+'; ---表格边框定义
+    l_ct        := 0;
+    L_TEXT      := L_TEXT || '<tr>
+';
+    g_nvl_value := l_nvl_value;
+    l_sql1      := 'with a as (select * from (' || l_sql ||
+                   ') where rownum=1) select * from SQL_TO_HTML_PTF.input(a)';
+    --dbms_output.put_line(l_sql);
+    OPEN cur_ FOR l_sql1; ---取一行记录用于取字段名
+  
+    FOR rec_ IN get_columns LOOP
+      L_TEXT := L_TEXT || '<th>' || rec_.name || '</th>';
+      l_ct   := l_ct + 1;
+      -- DBMS_OUTPUT.put_line(rec_.name );
+    END LOOP;
+    L_TEXT := L_TEXT || '
+</tr>';
+    l_sql2 := 'with a as (' || l_sql ||
+              ') select * from SQL_TO_HTML_PTF.input(a)';
+  
+    OPEN cur_ FOR l_sql2; ---开始获得表体数据
+  
+    FOR rec_ IN get_columns LOOP
+      if mod(get_columns %ROWCOUNT, l_ct) = 1 then
+        L_TEXT := L_TEXT || '
+   <tr>';
+      end if;
+      L_TEXT := L_TEXT || '<td>' || rec_.value || '</td>';
+      --  dbms_output.put_line(to_char(get_columns %ROWCOUNT));
+      if mod(get_columns %ROWCOUNT, l_ct) = 0 then
+        L_TEXT := L_TEXT || '
+    </tr>';
+      end if;
+      -- DBMS_OUTPUT.put_line(rec_.value );
+    END LOOP;
+    L_TEXT := L_TEXT || '
+   </table>
+</body>
+</html>
+';
+    rollback;
+  
+    RETURN L_TEXT;
+  EXCEPTION
+    WHEN OTHERS THEN
+      O_error_message := 'FUNCTION_ERROR: ' || SQLERRM || '; SQL_TO_HTML ;' ||
+                         to_char(SQLCODE);
+      RETURN O_error_message;
+  END;
+
+END SQL_TO_HTML_PTF;
+/

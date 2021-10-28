@@ -60,7 +60,7 @@ CREATE OR REPLACE PACKAGE BODY SQL_TO_HTML_PTF AS
         tab.column(i).pass_through := FALSE;
         tab.column(i).for_read := TRUE; --是否多态表的列
         NEW_COLS(i) := DBMS_TF.COLUMN_METADATA_T(name => tab.column(i).description.name, --字段名不变
-                                                 type => DBMS_TF.TYPE_VARCHAR2); --字段类型不变
+                                                 type => DBMS_TF.TYPE_VARCHAR2); --字段类型改成varchar2
       END IF;
     END LOOP;
     RETURN DBMS_TF.describe_t(new_columns     => new_cols,

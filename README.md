@@ -1,10 +1,18 @@
 # sql_to_html
-sql查询结果转换成html表格   
+sql query convert to a html's table  (3 ways)
+sql查询结果转换成html表格  (3种方式)  
 
-a new version with PTF(ORACLE 18C)    
+## version with xlst(xml template)   
+https://github.com/Dark-Athena/sql_to_html-oracle/blob/main/sql_to_html_xlst.fnc    
+example  
+
+```sql
+select sql_to_html_xlst(Q'{select * from job_history}') html_table  from dual;
+```
+
+
+## version with PTF(ORACLE 18C)    
 https://github.com/Dark-Athena/sql_to_html-oracle/blob/main/SQL_TO_HTML_PTF.pkg   
-
-sql query convert to a html's table 
 
 example 1:
 
@@ -108,3 +116,6 @@ from dual}',
 </html>
 
 ```
+
+## first ver,can't deal none value   
+https://github.com/Dark-Athena/sql_to_html-oracle/blob/main/sql_to_html.fnc

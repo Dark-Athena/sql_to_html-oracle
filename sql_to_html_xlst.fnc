@@ -82,7 +82,7 @@ begin
     dbms_lob.append(l_returnvalue, l_html.getclobval());
   end if;
   dbms_lob.append(l_returnvalue, '</body>' || chr(10) || '</html>');
-  return replace(l_returnvalue,'    <td/>','    <td>&nbsp;</td>');;
+  return replace(l_returnvalue,'    <td/>','    <td>&nbsp;</td>');
 exception
   when others then
     raise;
